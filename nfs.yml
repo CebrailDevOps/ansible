@@ -1,22 +1,17 @@
 ---
 - name: Configuration du serveur NFS
   hosts: nfs
-  become: yes
   tasks:
     - name: Installer les packages nécessaires
       apt:
         name: ["git", "rsync", "nfs-kernel-server", "ca-certificates", "curl"]
         state: present
-
-    - name: Supprimez le répertoire existant
-      file:
-        path: '/home/mysonet'
-        state: absent
+        become: yes
 
     - name: Cloner le dépôt Git
       git:
         repo: 'https://github.com/CebrailDevOps/sprin.git'
-        dest: '/home/mysonet'
+        dest: '/home/mysonet/sprin'
         update: yes
 
     - name: Déplacer les fichiers clonés
@@ -27,6 +22,7 @@
         path: /etc/exports
         block: |
           /home/mysonet/mysonet-mysql 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.102 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.103(rw,sync,no_subtree_check)
+        become: yes
 
     - name: Rafraîchir les exports et redémarrer NFS
       command:
@@ -34,6 +30,7 @@
       loop:
         - exportfs -a
         - systemctl restart nfs-kernel-server
+        become: yes
 
     - name: Installer Docker
       shell: curl -sSL https://get.docker.com | sh
@@ -43,14 +40,17 @@
         name: mysonet
         groups: docker
         append: yes
+        become: yes
 
     - name: Installer Docker-compose
       apt:
         name: docker-compose
         state: present
+        become: yes
 
     - name: Redémarrer le serveur
       ansible.builtin.reboot:
+        become: yes
 
     - name: Construire l'image Docker
       docker_image:
@@ -64,19 +64,15 @@
         project_src: /home/mysonet
         state: present
 
-    - name: Créer les tables
-      block:
-        - name: Executer le conteneur pour lancer des commandes
-          command: 
-            cmd: "{{ item }}"
-          loop:
-            - docker container exec -ti mysonet_db_1 sh
-            - mysql -u root -p'123456a.'
-            - use mysonet;
-            - create table mysonetusers (id int auto_increment primary key, username varchar(50) not null unique, ip_add varchar(40) not null unique, creation_date timestamp default current_timestamp);
-            - CREATE TABLE demandes_ami (id INT AUTO_INCREMENT PRIMARY KEY,id_demandeur INT NOT NULL,id_demande INT NOT NULL,statut VARCHAR(255) DEFAULT NULL,ref_demande varchar(255),FOREIGN KEY (id_demandeur) REFERENCES mysonetusers(id),FOREIGN KEY (id_demande) REFERENCES mysonetusers(id));
-            - exit
-            - exit
+    - name: Transférer le script SQL vers le serveur
+      ansible.builtin.copy:
+        src: init.sql
+        dest: /home/mysonet/init.sql
+        mode: '0644'
+
+    - name: Exécuter le script SQL dans le conteneur MySQL
+      command:
+        cmd: docker exec -i mysonet_db_1 mysql -u root -p'123456a.' < /home/mysonet/init.sql
 
     - name: Arrêter les conteneurs
       command: docker compose down
@@ -86,9 +82,11 @@
         path: /home/mysonet/mysonet-mysql
         mode: '0777'
         recurse: yes
+        become: yes
 
     - name: Ajouter une tâche cron pour maintenir les permissions
       cron:
         name: "Maintenir les permissions pour mysonet-mysql"
         minute: "*"
         job: "chmod -R 777 /home/mysonet/mysonet-mysql"
+        become: yes
