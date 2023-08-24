@@ -8,11 +8,16 @@
         name: ["git", "rsync", "nfs-kernel-server", "ca-certificates", "curl"]
         state: present
 
+    - name: Supprimez le répertoire existant
+      file:
+        path: '/home/mysonet'
+        state: absent
+
     - name: Cloner le dépôt Git
       git:
         repo: 'https://github.com/CebrailDevOps/sprin.git'
         dest: '/home/mysonet'
-        clone: yes
+        update: yes
 
     - name: Déplacer les fichiers clonés
       command: mv /home/mysonet/sprin/* /home/mysonet/
