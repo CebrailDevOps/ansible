@@ -1,0 +1,89 @@
+---
+- name: Configuration du serveur NFS
+  hosts: nfs
+  become: yes
+  tasks:
+    - name: Installer les packages nécessaires
+      apt:
+        name: ["git", "rsync", "nfs-kernel-server", "ca-certificates", "curl"]
+        state: present
+
+    - name: Cloner le dépôt Git
+      git:
+        repo: 'https://github.com/CebrailDevOps/sprin.git'
+        dest: '/home/mysonet'
+        clone: yes
+
+    - name: Déplacer les fichiers clonés
+      command: mv /home/mysonet/sprin/* /home/mysonet/
+
+    - name: Configurer les exports NFS
+      blockinfile:
+        path: /etc/exports
+        block: |
+          /home/mysonet/mysonet-mysql 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.102 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.103(rw,sync,no_subtree_check)
+
+    - name: Rafraîchir les exports et redémarrer NFS
+      command:
+        cmd: "{{ item }}"
+      loop:
+        - exportfs -a
+        - systemctl restart nfs-kernel-server
+
+    - name: Installer Docker
+      shell: curl -sSL https://get.docker.com | sh
+
+    - name: Ajouter l'utilisateur mysonet au groupe docker
+      user:
+        name: mysonet
+        groups: docker
+        append: yes
+
+    - name: Installer Docker-compose
+      apt:
+        name: docker-compose
+        state: present
+
+    - name: Redémarrer le serveur
+      ansible.builtin.reboot:
+
+    - name: Construire l'image Docker
+      docker_image:
+        path: /home/mysonet
+        name: cebraildevops/mysonet-php
+        tag: 1.0
+        build: yes
+
+    - name: Lancer Docker Compose
+      docker_compose:
+        project_src: /home/mysonet
+        state: present
+
+    - name: Créer les tables
+      block:
+        - name: Executer le conteneur pour lancer des commandes
+          command: 
+            cmd: "{{ item }}"
+          loop:
+            - docker container exec -ti mysonet_db_1 sh
+            - mysql -u root -p'123456a.'
+            - use mysonet;
+            - create table mysonetusers (id int auto_increment primary key, username varchar(50) not null unique, ip_add varchar(40) not null unique, creation_date timestamp default current_timestamp);
+            - CREATE TABLE demandes_ami (id INT AUTO_INCREMENT PRIMARY KEY,id_demandeur INT NOT NULL,id_demande INT NOT NULL,statut VARCHAR(255) DEFAULT NULL,ref_demande varchar(255),FOREIGN KEY (id_demandeur) REFERENCES mysonetusers(id),FOREIGN KEY (id_demande) REFERENCES mysonetusers(id));
+            - exit
+            - exit
+
+    - name: Arrêter les conteneurs
+      command: docker compose down
+
+    - name: Changer les permissions du dossier mysonet-mysql
+      file:
+        path: /home/mysonet/mysonet-mysql
+        mode: '0777'
+        recurse: yes
+
+    - name: Ajouter une tâche cron pour maintenir les permissions
+      cron:
+        name: "Maintenir les permissions pour mysonet-mysql"
+        minute: "*"
+        job: "chmod -R 777 /home/mysonet/mysonet-mysql"

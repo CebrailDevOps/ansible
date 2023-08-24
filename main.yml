@@ -1,0 +1,13 @@
+---
+- import_playbook: nfs.yml
+
+- import_playbook: sprin.yml
+
+- import_playbook: prom.yml
+
+- name: Redémarrer tous les serveurs
+  hosts: debian
+  tasks:
+    - name: Redémarrage des serveurs
+      ansible.builtin.reboot:
+      become: yes
