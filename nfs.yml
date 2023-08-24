@@ -50,6 +50,7 @@
 
     - name: Installer Docker
       shell: curl -sSL https://get.docker.com | sh
+      become: yes
 
     - name: Ajouter l'utilisateur mysonet au groupe docker
       user:
