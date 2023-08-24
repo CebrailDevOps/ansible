@@ -6,7 +6,12 @@
       apt:
         name: ["git", "rsync", "nfs-kernel-server", "ca-certificates", "curl"]
         state: present
-        become: yes
+      become: yes
+
+    - name: Supprimez le répertoire existant
+      file:
+        path: '/home/mysonet/sprin'
+        state: absent
 
     - name: Cloner le dépôt Git
       git:
@@ -14,15 +19,26 @@
         dest: '/home/mysonet/sprin'
         update: yes
 
+    - name: Supprimer les dossiers cibles s'ils existent
+      file:
+        path: "/home/mysonet/{{ item }}"
+        state: absent
+      loop:
+        - mysonet-data
+        - mysonet-mysql
+        - scripts
+        - sshkey
+      become: yes
+
     - name: Déplacer les fichiers clonés
-      command: mv /home/mysonet/sprin/* /home/mysonet/
+      shell: mv /home/mysonet/sprin/* /home/mysonet/
 
     - name: Configurer les exports NFS
       blockinfile:
         path: /etc/exports
         block: |
-          /home/mysonet/mysonet-mysql 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.102 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.103(rw,sync,no_subtree_check)
-        become: yes
+          /home/mysonet/mysonet-mysql 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.102(rw,sync,no_subtree_check) 192.168.122.103(rw,sync,no_subtree_check)
+      become: yes
 
     - name: Rafraîchir les exports et redémarrer NFS
       command:
@@ -30,7 +46,7 @@
       loop:
         - exportfs -a
         - systemctl restart nfs-kernel-server
-        become: yes
+      become: yes
 
     - name: Installer Docker
       shell: curl -sSL https://get.docker.com | sh
@@ -40,17 +56,17 @@
         name: mysonet
         groups: docker
         append: yes
-        become: yes
+      become: yes
 
     - name: Installer Docker-compose
       apt:
         name: docker-compose
         state: present
-        become: yes
+      become: yes
 
     - name: Redémarrer le serveur
       ansible.builtin.reboot:
-        become: yes
+      become: yes
 
     - name: Construire l'image Docker
       docker_image:
@@ -74,6 +90,12 @@
       command:
         cmd: docker exec -i mysonet_db_1 mysql -u root -p'123456a.' < /home/mysonet/init.sql
 
+    - name: Supprimer le script SQL
+      ansible.builtin.file:
+        path: /home/mysonet/init.sql
+        state: absent
+      become: yes
+
     - name: Arrêter les conteneurs
       command: docker compose down
 
@@ -82,11 +104,11 @@
         path: /home/mysonet/mysonet-mysql
         mode: '0777'
         recurse: yes
-        become: yes
+      become: yes
 
     - name: Ajouter une tâche cron pour maintenir les permissions
       cron:
         name: "Maintenir les permissions pour mysonet-mysql"
         minute: "*"
         job: "chmod -R 777 /home/mysonet/mysonet-mysql"
-        become: yes
+      become: yes
