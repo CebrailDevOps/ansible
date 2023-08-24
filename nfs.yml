@@ -88,8 +88,9 @@
         mode: '0644'
 
     - name: Exécuter le script SQL dans le conteneur MySQL
-      command:
-        cmd: docker exec -i mysonet_db_1 mysql -u root -p'123456a.' < /home/mysonet/init.sql
+      docker_container:
+        name: mysonet_db_1
+        command: mysql -u root -p'123456a.' < /home/mysonet/init.sql
 
     - name: Supprimer le script SQL
       ansible.builtin.file:
