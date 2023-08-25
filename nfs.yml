@@ -22,7 +22,7 @@
     - name: Créer un dossier
       file:
         path: "/home/mysonet/mysonet-mysql"
-        state: present
+        state: directory
 
     - name: Supprimer le dossier cible
       file:
@@ -92,6 +92,11 @@
       docker_compose:
         project_src: /home/mysonet
         state: present
+
+    - name: Supprimer init.sql
+      file:
+        path: "/home/mysonet/init.sql"
+        state: absent
 
     - name: Transférer le script SQL vers le serveur
       ansible.builtin.copy:

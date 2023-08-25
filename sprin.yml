@@ -16,18 +16,18 @@
     - name: Créer un dossier
       file:
         path: "/home/mysonet/mysonet-mysql"
-        state: present
-
-    - name: Supprimer le dossier cible
-      file:
-        path: "/home/mysonet/sprin/mysonet-mysql"
-        state: absent
+        state: directory
 
     - name: Cloner le dépôt Git
       git:
         repo: 'https://github.com/CebrailDevOps/sprin.git'
         dest: '/home/mysonet/sprin'
         update: yes
+
+    - name: Supprimer le dossier cible
+      file:
+        path: "/home/mysonet/sprin/mysonet-mysql"
+        state: absent
 
     - name: Supprimer les dossiers cibles s'ils existent
       file:
@@ -172,6 +172,7 @@
     - name: Initialize Swarm
       command: docker swarm init --advertise-addr 192.168.122.101
       register: swarm_init
+      when: "'Swarm: inactive' in docker_info.stdout"
       changed_when: "'This node joined a swarm as a manager' in swarm_init.stdout or 'Swarm initialized' in swarm_init.stdout"
 
     - name: Retrieve Swarm Worker Token
