@@ -46,7 +46,7 @@
       blockinfile:
         path: /etc/exports
         block: |
-          /home/mysonet/mysonet-mysql 192.168.122.101(rw,sync,no_subtree_check) 192.168.122.102(rw,sync,no_subtree_check) 192.168.122.103(rw,sync,no_subtree_check)
+          /home/mysonet/mysonet-mysql "{{ hostvars['sprin1']['ansible_host'] }}"(rw,sync,no_subtree_check) "{{ hostvars['sprin2']['ansible_host'] }}"(rw,sync,no_subtree_check) "{{ hostvars['sprin3']['ansible_host'] }}"(rw,sync,no_subtree_check)
       become: yes
 
     - name: Rafraîchir les exports et redémarrer NFS
