@@ -79,10 +79,16 @@
     - name: Arrêter les conteneurs
       shell: docker compose down
 
+    - name: Get Docker Info
+      command: docker info
+      register: docker_info
+      changed_when: false
+
     - name: Lancer Docker Compose
       docker_compose:
         project_src: /home/mysonet
         state: present
+      when: "'Swarm: inactive' in docker_info.stdout"
 
     - name: Arrêter les conteneurs
       shell: docker compose down
