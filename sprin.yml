@@ -193,13 +193,25 @@
 - name: Join nodes to Docker Swarm
   hosts: sprin2:sprin3
   tasks:
+    - name: Get Docker Info
+      command: docker info
+      register: docker_info
+      changed_when: false
+
     - name: Join Swarm
       command: docker swarm join --token {{ hostvars['sprin1'].worker_token.stdout }} {{ hostvars['sprin1']['ansible_host'] }}:2377
       register: join_result
       changed_when: "'This node joined a swarm as a worker' in join_result.stdout"
+      when: "'Swarm: inactive' in docker_info.stdout"
 
 - name: Deploy Docker Stack
   hosts: sprin1
   tasks:
+    - name: Get Docker Info
+      command: docker info
+      register: docker_info
+      changed_when: false
+
     - name: Deploy Stack
       command: docker stack deploy -c docker-compose.yml mysonet
+      when: "'Swarm: inactive' in docker_info.stdout"
