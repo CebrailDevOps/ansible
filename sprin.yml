@@ -87,18 +87,16 @@
     - name: Arrêter les conteneurs
       shell: docker compose down
 
-    - name: Trouver tous les fichiers et dossiers dans le répertoire cible
-      find:
-        paths: "/home/mysonet/mysonet-mysql"
-        recurse: yes
-      register: files_to_delete
-
-    - name: Supprimer tous les fichiers et dossiers trouvés
+    - name: Supprimer le répertoire /home/mysonet/mysonet-mysql et son contenu
       file:
-        path: "{{ item.path }}"
+        path: /home/mysonet/mysonet-mysql
         state: absent
-      with_items: "{{ files_to_delete.files }}"
-      when: files_to_delete.matched > 0
+      become: yes
+
+    - name: Recréer le répertoire /home/mysonet/mysonet-mysql
+      file:
+        path: /home/mysonet/mysonet-mysql
+        state: directory
 
     - name: Désactiver Docker au démarrage
       service:
@@ -107,10 +105,16 @@
       become: yes
 
     - name: Copier la clé SSH
+      slurp:
+        src: /home/mysonet/.ssh/id_rsa.pub
+      register: public_key
+
+    - name: Coller la clé SSH
       authorized_key:
         user: mysonet
-        key: "{{ lookup('file', '/home/mysonet/.ssh/id_rsa.pub') }}"
-      delegate_to: 192.168.122.151
+        key: {{ public_key['content'] | b64decode }}"
+      delegate_to: "{{ hostvars['nfs1']['ansible_host'] }}"
+      become: yes
 
     - name: Changer les permissions et propriétés
       file:
@@ -131,7 +135,7 @@
     - name: Ajouter un montage NFS dans /etc/fstab
       lineinfile:
         path: /etc/fstab
-        line: "192.168.122.151:/home/mysonet/mysonet-mysql /home/mysonet/mysonet-mysql nfs _netdev,auto 0 0"
+        line: "{{ hostvars['nfs1']['ansible_host'] }}:/home/mysonet/mysonet-mysql /home/mysonet/mysonet-mysql nfs _netdev,auto 0 0"
         state: present
       become: yes
 
@@ -139,22 +143,21 @@
       cron:
         name: "{{ item.name }}"
         job: "{{ item.job }}"
-        minute: "{{ item.minute }}"
-        reboot: yes
+        special_time: reboot
       loop:
         - name: "Copy files on reboot"
           job: "sleep 25 && /home/mysonet/scripts/copyfiles.sh"
-          minute: "@reboot"
         - name: "Mount on reboot"
           job: "sleep 30 && mount -a"
-          minute: "@reboot"
         - name: "Start docker on reboot"
           job: "sleep 35 && systemctl start docker"
-          minute: "@reboot"
-        - name: "Relance des demandes"
-          job: "/bin/bash /home/mysonet/scripts/relance_demandes.sh"
-          minute: "*/15"
-          reboot: no
+      become: yes
+
+    - name: Ajouter des tâches au crontab
+      cron:
+        name: "Relance des demandes"
+        job: "/bin/bash /home/mysonet/scripts/relance_demandes.sh"
+        minute: "*/15"
       become: yes
 
     - name: Redémarrer le serveur
@@ -170,7 +173,7 @@
       changed_when: false
 
     - name: Initialize Swarm
-      command: docker swarm init --advertise-addr 192.168.122.101
+      command: docker swarm init --advertise-addr {{ hostvars['sprin1']['ansible_host'] }}
       register: swarm_init
       when: "'Swarm: inactive' in docker_info.stdout"
       changed_when: "'This node joined a swarm as a manager' in swarm_init.stdout or 'Swarm initialized' in swarm_init.stdout"
@@ -185,7 +188,7 @@
   hosts: sprin2:sprin3
   tasks:
     - name: Join Swarm
-      command: docker swarm join --token {{ hostvars['sprin1'].worker_token.stdout }} 192.168.122.101:2377
+      command: docker swarm join --token {{ hostvars['sprin1'].worker_token.stdout }} {{ hostvars['sprin1']['ansible_host'] }}:2377
       register: join_result
       changed_when: "'This node joined a swarm as a worker' in join_result.stdout"
 
