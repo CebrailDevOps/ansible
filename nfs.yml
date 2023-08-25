@@ -19,13 +19,22 @@
         dest: '/home/mysonet/sprin'
         update: yes
 
+    - name: Créer un dossier
+      file:
+        path: "/home/mysonet/mysonet-mysql"
+        state: present
+
+    - name: Supprimer le dossier cible
+      file:
+        path: "/home/mysonet/sprin/mysonet-mysql"
+        state: absent
+
     - name: Supprimer les dossiers cibles s'ils existent
       file:
         path: "/home/mysonet/{{ item }}"
         state: absent
       loop:
         - mysonet-data
-        - mysonet-mysql
         - scripts
         - sshkey
       become: yes
@@ -76,6 +85,9 @@
         tag: 1.0
         source: build
 
+    - name: Arrêter les conteneurs
+      shell: docker compose down
+
     - name: Lancer Docker Compose
       docker_compose:
         project_src: /home/mysonet
@@ -88,18 +100,10 @@
         mode: '0644'
 
     - name: Exécuter le script SQL dans le conteneur MySQL
-      docker_container:
-        name: mysonet_db_1
-        command: mysql -u root -p'123456a.' < /home/mysonet/init.sql
-
-    - name: Supprimer le script SQL
-      ansible.builtin.file:
-        path: /home/mysonet/init.sql
-        state: absent
-      become: yes
+      shell: docker container exec -i mysonet_db_1 mysql -u root -p'123456a.' < /home/mysonet/init.sql
 
     - name: Arrêter les conteneurs
-      command: docker compose down
+      shell: docker compose down
 
     - name: Changer les permissions du dossier mysonet-mysql
       file:
