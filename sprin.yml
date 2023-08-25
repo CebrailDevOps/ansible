@@ -1,0 +1,195 @@
+---
+- name: Configuration des serveurs SPRIN
+  hosts: sprin
+  tasks:
+    - name: Installer les packages nécessaires
+      apt:
+        name: ["git", "rsync", "nfs-common", "ca-certificates", "curl", "cifs-utils"]
+        state: present
+      become: yes
+
+    - name: Supprimez le répertoire existant
+      file:
+        path: '/home/mysonet/sprin'
+        state: absent
+
+    - name: Créer un dossier
+      file:
+        path: "/home/mysonet/mysonet-mysql"
+        state: present
+
+    - name: Supprimer le dossier cible
+      file:
+        path: "/home/mysonet/sprin/mysonet-mysql"
+        state: absent
+
+    - name: Cloner le dépôt Git
+      git:
+        repo: 'https://github.com/CebrailDevOps/sprin.git'
+        dest: '/home/mysonet/sprin'
+        update: yes
+
+    - name: Supprimer les dossiers cibles s'ils existent
+      file:
+        path: "/home/mysonet/{{ item }}"
+        state: absent
+      loop:
+        - mysonet-data
+        - scripts
+        - sshkey
+      become: yes
+
+    - name: Déplacer les fichiers clonés
+      shell: mv /home/mysonet/sprin/* /home/mysonet/
+
+    - name: Installer Docker
+      shell: curl -sSL https://get.docker.com | sh
+      become: yes
+
+    - name: Ajouter l'utilisateur mysonet au groupe docker
+      user:
+        name: mysonet
+        groups: docker
+        append: yes
+      become: yes
+
+    - name: Installer Docker-compose
+      apt:
+        name: docker-compose
+        state: present
+      become: yes
+
+    - name: Redémarrer le serveur
+      ansible.builtin.reboot:
+      become: yes
+
+    - name: Construire l'image Docker
+      docker_image:
+        path: /home/mysonet
+        name: cebraildevops/mysonet-php
+        tag: 1.0
+        source: build
+
+    - name: Démonter un système de fichiers spécifique
+      mount:
+        path: /home/mysonet/mysonet-mysql
+        state: unmounted
+      become: yes
+
+    - name: Arrêter les conteneurs
+      shell: docker compose down
+
+    - name: Lancer Docker Compose
+      docker_compose:
+        project_src: /home/mysonet
+        state: present
+
+    - name: Arrêter les conteneurs
+      shell: docker compose down
+
+    - name: Trouver tous les fichiers et dossiers dans le répertoire cible
+      find:
+        paths: "/home/mysonet/mysonet-mysql"
+        recurse: yes
+      register: files_to_delete
+
+    - name: Supprimer tous les fichiers et dossiers trouvés
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      with_items: "{{ files_to_delete.files }}"
+      when: files_to_delete.matched > 0
+
+    - name: Désactiver Docker au démarrage
+      service:
+        name: docker
+        enabled: no
+      become: yes
+
+    - name: Copier la clé SSH
+      authorized_key:
+        user: mysonet
+        key: "{{ lookup('file', '/home/mysonet/.ssh/id_rsa.pub') }}"
+      delegate_to: 192.168.122.151
+
+    - name: Changer les permissions et propriétés
+      file:
+        path: "/home/mysonet/mysonet-mysql"
+        state: directory
+        mode: '0777'
+        owner: 999
+        group: 999
+      become: yes
+
+    - name: Changer les permissions pour les scripts
+      file:
+        path: "/home/mysonet/scripts"
+        mode: 'a+x'
+        recurse: yes
+      become: yes
+
+    - name: Ajouter un montage NFS dans /etc/fstab
+      lineinfile:
+        path: /etc/fstab
+        line: "192.168.122.151:/home/mysonet/mysonet-mysql /home/mysonet/mysonet-mysql nfs _netdev,auto 0 0"
+        state: present
+      become: yes
+
+    - name: Ajouter des tâches au crontab
+      cron:
+        name: "{{ item.name }}"
+        job: "{{ item.job }}"
+        minute: "{{ item.minute }}"
+        reboot: yes
+      loop:
+        - name: "Copy files on reboot"
+          job: "sleep 25 && /home/mysonet/scripts/copyfiles.sh"
+          minute: "@reboot"
+        - name: "Mount on reboot"
+          job: "sleep 30 && mount -a"
+          minute: "@reboot"
+        - name: "Start docker on reboot"
+          job: "sleep 35 && systemctl start docker"
+          minute: "@reboot"
+        - name: "Relance des demandes"
+          job: "/bin/bash /home/mysonet/scripts/relance_demandes.sh"
+          minute: "*/15"
+          reboot: no
+      become: yes
+
+    - name: Redémarrer le serveur
+      ansible.builtin.reboot:
+      become: yes
+
+- name: Initialize Docker Swarm
+  hosts: sprin1
+  tasks:
+    - name: Get Docker Info
+      command: docker info
+      register: docker_info
+      changed_when: false
+
+    - name: Initialize Swarm
+      command: docker swarm init --advertise-addr 192.168.122.101
+      register: swarm_init
+      changed_when: "'This node joined a swarm as a manager' in swarm_init.stdout or 'Swarm initialized' in swarm_init.stdout"
+
+    - name: Retrieve Swarm Worker Token
+      command: docker swarm join-token worker -q
+      register: worker_token
+      delegate_to: sprin1
+      run_once: true
+
+- name: Join nodes to Docker Swarm
+  hosts: sprin2:sprin3
+  tasks:
+    - name: Join Swarm
+      command: docker swarm join --token {{ hostvars['sprin1'].worker_token.stdout }} 192.168.122.101:2377
+      register: join_result
+      changed_when: "'This node joined a swarm as a worker' in join_result.stdout"
+
+- name: Deploy Docker Stack
+  hosts: sprin1
+  tasks:
+    - name: Deploy Stack
+      command: docker stack deploy -c docker-compose.yml mysonet
