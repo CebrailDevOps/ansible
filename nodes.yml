@@ -3,6 +3,20 @@
   hosts: [nfs, sprin]
   become: yes
   tasks:
+
+    - name: Créer le groupe node_exporter
+      group:
+        name: node_exporter
+        system: yes
+        state: present
+
+    - name: Créer l'utilisateur node_exporter
+      user:
+        name: node_exporter
+        system: yes
+        shell: /sbin/nologin
+        group: node_exporter
+
     - name: Vérifier si node_exporter est déjà installé
       stat:
         path: /usr/local/bin/node_exporter
@@ -29,6 +43,7 @@
         mode: '0755'
         owner: node_exporter
         group: node_exporter
+        remote_src: yes
       when: not node_exporter_stat.stat.exists
 
     - name: Supprimer le tarball et le dossier d'extraction
@@ -39,19 +54,6 @@
         - /tmp/node_exporter-1.6.1.linux-amd64.tar.gz
         - /tmp/node_exporter-1.6.1.linux-amd64
       when: not node_exporter_stat.stat.exists
-
-    - name: Créer le groupe node_exporter
-      group:
-        name: node_exporter
-        system: yes
-        state: present
-
-    - name: Créer l'utilisateur node_exporter
-      user:
-        name: node_exporter
-        system: yes
-        shell: /sbin/nologin
-        group: node_exporter
 
     - name: Créer le service systemd pour Node Exporter
       copy:
