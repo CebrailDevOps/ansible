@@ -78,6 +78,9 @@
       ansible.builtin.reboot:
       become: yes
 
+    - name: Attendre que MySQL soit prêt
+      command: sleep 30
+
     - name: Construire l'image Docker
       docker_image:
         path: /home/mysonet

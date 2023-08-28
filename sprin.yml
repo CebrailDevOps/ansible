@@ -63,6 +63,9 @@
       ansible.builtin.reboot:
       become: yes
 
+    - name: Attendre que MySQL soit prêt
+      command: sleep 30
+
     - name: Construire l'image Docker
       docker_image:
         path: /home/mysonet
@@ -169,6 +172,9 @@
     - name: Redémarrer le serveur
       ansible.builtin.reboot:
       become: yes
+
+    - name: Attendre que MySQL soit prêt
+      command: sleep 30
 
 - name: Initialize Docker Swarm
   hosts: sprin1
