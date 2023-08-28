@@ -104,6 +104,9 @@
         dest: /home/mysonet/init.sql
         mode: '0644'
 
+    - name: Attendre que MySQL soit prêt
+      command: sleep 30
+
     - name: Exécuter le script SQL dans le conteneur MySQL
       shell: docker container exec -i mysonet_db_1 mysql -u root -p'123456a.' < /home/mysonet/init.sql
 
