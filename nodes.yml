@@ -1,0 +1,79 @@
+---
+- name: Configurer NFS et SPRIN pour Prometheus Node Exporter
+  hosts: [nfs, sprin]
+  become: yes
+  tasks:
+    - name: Vérifier si node_exporter est déjà installé
+      stat:
+        path: /usr/local/bin/node_exporter
+      register: node_exporter_stat
+
+    - name: Télécharger Prometheus Node Exporter
+      get_url:
+        url: https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz
+        dest: /tmp/node_exporter-1.6.1.linux-amd64.tar.gz
+      when: not node_exporter_stat.stat.exists
+
+    - name: Extraire Node Exporter
+      unarchive:
+        src: /tmp/node_exporter-1.6.1.linux-amd64.tar.gz
+        dest: /tmp
+        remote_src: yes
+        creates: /tmp/node_exporter-1.6.1.linux-amd64
+      when: not node_exporter_stat.stat.exists
+
+    - name: Copier node_exporter dans /usr/local/bin
+      copy:
+        src: "/tmp/node_exporter-1.6.1.linux-amd64/node_exporter"
+        dest: "/usr/local/bin/node_exporter"
+        mode: '0755'
+        owner: node_exporter
+        group: node_exporter
+      when: not node_exporter_stat.stat.exists
+
+    - name: Supprimer le tarball et le dossier d'extraction
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/node_exporter-1.6.1.linux-amd64.tar.gz
+        - /tmp/node_exporter-1.6.1.linux-amd64
+      when: not node_exporter_stat.stat.exists
+
+    - name: Créer le groupe node_exporter
+      group:
+        name: node_exporter
+        system: yes
+        state: present
+
+    - name: Créer l'utilisateur node_exporter
+      user:
+        name: node_exporter
+        system: yes
+        shell: /sbin/nologin
+        group: node_exporter
+
+    - name: Créer le service systemd pour Node Exporter
+      copy:
+        dest: "/etc/systemd/system/node_exporter.service"
+        content: |
+          [Unit]
+          Description=Prometheus Node_exporter
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=node_exporter
+          Group=node_exporter
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Démarrer et activer le service node_exporter
+      systemd:
+        name: node_exporter
+        enabled: yes
+        state: started
+        daemon_reload: yes
