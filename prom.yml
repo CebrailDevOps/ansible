@@ -1,0 +1,136 @@
+---
+- name: Configuration du serveur Prometheus
+  hosts: prom
+  become: yes
+  tasks:
+
+    - name: Créer le groupe Prometheus
+      group:
+        name: prometheus
+        system: yes
+
+    - name: Créer l'utilisateur Prometheus
+      user:
+        name: prometheus
+        group: prometheus
+        shell: /sbin/nologin
+        system: yes
+
+    - name: Créer les dossiers nécessaires
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /var/lib/prometheus
+        - /etc/prometheus/rules
+        - /etc/prometheus/rules.d
+        - /etc/prometheus/files_sd
+
+    - name: Mettre à jour la liste des packages
+      apt:
+        update_cache: yes
+
+    - name: Installer les packages nécessaires
+      apt:
+        name: 
+          - wget
+          - curl
+          - apt-transport-https
+          - software-properties-common
+        state: present
+
+    - name: Télécharger Prometheus
+      get_url:
+        url: https://github.com/prometheus/prometheus/releases/download/v2.37.9/prometheus-2.37.9.linux-amd64.tar.gz
+        dest: /tmp/prometheus-2.37.9.linux-amd64.tar.gz
+
+    - name: Extraire Prometheus
+      unarchive:
+        src: /tmp/prometheus-2.37.9.linux-amd64.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Supprimer le fichier tar.gz de Prometheus
+      file:
+        path: /tmp/prometheus-2.37.9.linux-amd64.tar.gz
+        state: absent
+
+    - name: Déplacer les binaires de Prometheus
+      command:
+        cmd: mv /tmp/prometheus-2.37.9.linux-amd64/{{ item }} /usr/local/bin/
+      with_items:
+        - prometheus
+        - promtool
+
+    - name: Déplacer le fichier de configuration de Prometheus
+      command:
+        cmd: mv /tmp/prometheus-2.37.9.linux-amd64/{{ item }} /etc/prometheus/
+      with_items:
+        - prometheus.yml
+
+    - name: Déplacer les dossiers de consoles et de libraries
+      command:
+        cmd: mv /tmp/prometheus-2.37.9.linux-amd64/{{ item }} /etc/prometheus/
+      with_items:
+        - consoles
+        - console_libraries
+
+    - name: Créer le service Prometheus
+      template:
+        src: prometheus.service.j2
+        dest: /etc/systemd/system/prometheus.service
+
+    - name: Changer les permissions des dossiers de configuration
+      file:
+        path: "/etc/prometheus/{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+        mode: 0775
+      with_items:
+        - rules
+        - rules.d
+        - files_sd
+
+    - name: Changer les permissions du répertoire de stockage
+      file:
+        path: /var/lib/prometheus/
+        state: directory
+        owner: prometheus
+        group: prometheus
+        mode: 0755
+
+    - name: Recharger systemd et démarrer Prometheus
+      systemd:
+        name: prometheus
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Ajouter la clé GPG de Grafana
+      apt_key:
+        url: "https://apt.grafana.com/gpg.key"
+        state: present
+
+    - name: Ajouter le dépôt de Grafana
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main"
+        state: present
+        filename: grafana
+
+    - name: Mettre à jour les paquets
+      apt:
+        update_cache: yes
+
+    - name: Installer Grafana
+      apt:
+        name: grafana
+        state: present
+
+    - name: Démarrer et activer le service Grafana
+      systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+        daemon_reload: yes
