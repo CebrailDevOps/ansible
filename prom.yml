@@ -151,5 +151,23 @@
         enabled: yes
         daemon_reload: yes
 
+    - name: Ajouter un job 'node' à la configuration Prometheus
+      blockinfile:
+        path: /etc/prometheus/prometheus.yml
+        block: |
+            - job_name: 'node'
+              scrape_interval: 5s
+              static_configs:
+                - targets: ['{{ hostvars['sprin1']['ansible_host'] }}:9100', '{{ hostvars['sprin2']['ansible_host'] }}:9100', '{{ hostvars['sprin3']['ansible_host'] }}:9100', '{{ hostvars['nfs1']['ansible_host'] }}:9100']
+        insertafter: EOF
+        create: no
+        marker: "# {mark} ANSIBLE MANAGED BLOCK FOR NODE JOB"
+
+    - name: Recharger et redémarrer le service Prometheus
+      systemd:
+        name: prometheus
+        daemon_reload: yes
+        state: restarted
+
     - name: Redémarrer le serveur
       ansible.builtin.reboot:
