@@ -118,7 +118,7 @@
     - name: Coller la clé SSH
       authorized_key:
         user: mysonet
-        key: {{ public_key['content'] | b64decode }}"
+        key: "{{ public_key['content'] | b64decode }}"
       delegate_to: "{{ hostvars['nfs1']['ansible_host'] }}"
       become: yes
 
