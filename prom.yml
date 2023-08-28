@@ -38,23 +38,32 @@
           - curl
           - apt-transport-https
           - software-properties-common
+          - gnupg
         state: present
+
+    - name: Vérifier si Prometheus est déjà installé
+      stat:
+        path: /usr/local/bin/prometheus
+      register: prometheus_binary
 
     - name: Télécharger Prometheus
       get_url:
         url: https://github.com/prometheus/prometheus/releases/download/v2.37.9/prometheus-2.37.9.linux-amd64.tar.gz
         dest: /tmp/prometheus-2.37.9.linux-amd64.tar.gz
+      when: not prometheus_binary.stat.exists
 
     - name: Extraire Prometheus
       unarchive:
         src: /tmp/prometheus-2.37.9.linux-amd64.tar.gz
         dest: /tmp
         remote_src: yes
+      when: not prometheus_binary.stat.exists
 
     - name: Supprimer le fichier tar.gz de Prometheus
       file:
         path: /tmp/prometheus-2.37.9.linux-amd64.tar.gz
         state: absent
+      when: not prometheus_binary.stat.exists
 
     - name: Déplacer les binaires de Prometheus
       command:
@@ -62,12 +71,14 @@
       with_items:
         - prometheus
         - promtool
+      when: not prometheus_binary.stat.exists
 
     - name: Déplacer le fichier de configuration de Prometheus
       command:
         cmd: mv /tmp/prometheus-2.37.9.linux-amd64/{{ item }} /etc/prometheus/
       with_items:
         - prometheus.yml
+      when: not prometheus_binary.stat.exists
 
     - name: Déplacer les dossiers de consoles et de libraries
       command:
@@ -75,11 +86,13 @@
       with_items:
         - consoles
         - console_libraries
+      when: not prometheus_binary.stat.exists
 
     - name: Créer le service Prometheus
       template:
         src: prometheus.service.j2
         dest: /etc/systemd/system/prometheus.service
+      when: not prometheus_binary.stat.exists
 
     - name: Changer les permissions des dossiers de configuration
       file:
@@ -92,6 +105,7 @@
         - rules
         - rules.d
         - files_sd
+      when: not prometheus_binary.stat.exists
 
     - name: Changer les permissions du répertoire de stockage
       file:
@@ -100,6 +114,7 @@
         owner: prometheus
         group: prometheus
         mode: 0755
+      when: not prometheus_binary.stat.exists
 
     - name: Recharger systemd et démarrer Prometheus
       systemd:
@@ -109,9 +124,10 @@
         daemon_reload: yes
 
     - name: Ajouter la clé GPG de Grafana
-      apt_key:
+      apt_url:
         url: "https://apt.grafana.com/gpg.key"
-        state: present
+        dest: /usr/share/keyrings/grafana.key
+        mode: '0644'
 
     - name: Ajouter le dépôt de Grafana
       apt_repository:
