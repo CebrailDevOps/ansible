@@ -213,11 +213,5 @@
 - name: Deploy Docker Stack
   hosts: sprin1
   tasks:
-    - name: Get Docker Info
-      command: docker info
-      register: docker_info
-      changed_when: false
-
     - name: Deploy Stack
       command: docker stack deploy -c docker-compose.yml mysonet
-      when: "'Swarm: inactive' in docker_info.stdout"
