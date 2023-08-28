@@ -134,3 +134,6 @@
         state: started
         enabled: yes
         daemon_reload: yes
+
+    - name: Redémarrer le serveur
+      ansible.builtin.reboot:
