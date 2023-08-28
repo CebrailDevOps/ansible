@@ -124,7 +124,7 @@
         daemon_reload: yes
 
     - name: Ajouter la clé GPG de Grafana
-      apt_url:
+      get_url:
         url: "https://apt.grafana.com/gpg.key"
         dest: /usr/share/keyrings/grafana.key
         mode: '0644'
