@@ -155,6 +155,7 @@
       blockinfile:
         path: /etc/prometheus/prometheus.yml
         block: |
+          #
             - job_name: 'node'
               scrape_interval: 5s
               static_configs:
